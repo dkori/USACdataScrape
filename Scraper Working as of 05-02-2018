@@ -1,0 +1,322 @@
+#scrape USAC Data Retrieval tool
+
+#the RSelenium package requires Firefox 46, which can be found here:
+
+#https://ftp.mozilla.org/pub/firefox/releases/46.0.1-funnelcake84/win32/en-US/
+
+
+
+rm(list=ls())
+
+#http://www.slforms.universalservice.org/DRT/Default.aspx
+
+#create list of needed packages
+
+packages<-c("readr","dplyr","RSelenium","rJava")
+
+
+
+for(package in packages){
+  
+  if(any(grepl(package,rownames(installed.packages()),ignore.case=TRUE))==FALSE){
+    
+    install.packages(as.character(package))
+    
+  }
+  
+}
+
+
+
+
+
+require("readr")
+
+require("dplyr")
+
+require("RSelenium")
+
+require("rJava")
+
+
+
+#create a new folder in the target directory for todays date, this only works for Macs, need to
+
+#create directory manually for windows
+
+#also make sure download directory is empty before downloading files to it
+
+date<-Sys.Date()
+
+
+
+directory<-'/users/shared/temp/DRT/all_states/'
+
+#system(paste0('mkdir N:\\MyDocuments\\Test'))
+
+system(paste0("mkdir ",'"',directory,'"'))
+
+system(paste0("mkdir ",directory,date))
+
+directory<-paste0(directory,date)
+
+
+
+
+
+
+
+
+
+
+url<-"http://www.slforms.universalservice.org/DRT/Default.aspx"
+
+
+
+#declare list of states needed for scrape
+
+states<-c("AK", "AL", "AR", "AS", "AZ", "CA", "CO", "CT", "DC", "DE", "FL", "GA", "GU", "HI", "IA", "ID", "IL", "IN", "KS", "KY", "LA", "MA", "MD", "ME", "MI", "MN", "MO", "MP", "MS", "MT", "NC", "ND", "NE", "NH", "NJ", "NM", "NV", "NY", "OH", "OK", "OR", "PA", "PR", "RI", "SC", "SD", "TN", "TX", "UT", "VA", "VI", "VT", "WA", "WI", "WV", "WY")
+
+#if the list of concerned states is larger than 20, we probably want each years file to be separate,
+
+#so create a flag that's dependent on the length of states
+
+if(length(states)>20){
+  
+  many_states<-TRUE
+  
+}else{many_states<-FALSE}
+
+#declare list of years needed
+
+years<-2010:2015
+
+
+
+#if you want to search for a specific BEN, change ben_flag to TRUE, and enter the BEN you want to search
+
+#into ben_no
+
+ben_flag<-FALSE
+
+if(ben_flag==TRUE){
+  
+  ben_no<-NA
+  
+}
+
+#if you want to search for a specific SPIN, change spin_flag to TRUE
+
+spin_flag<-FALSE
+
+if(spin_flag==TRUE){
+  
+  spin_no<-NA
+  
+}
+
+#declare port used for the first instance of the web browser
+
+port_num<-4600L
+
+
+
+
+
+for(year in years){
+  
+  #make directory for each year. again this doesn't work on Windows, so have to create manually
+  
+  system(paste0("mkdir ",directory,"/",year))
+  
+  
+  
+  #launch firefox window with necessary download preferences, since the old port will be in use,
+  
+  #have to do a different port number for each year
+  
+  port_num<-as.integer(port_num+1)
+  
+  #create a firefox profile that assigns the download directory, and suppresses download confirmation
+  
+  #if searching many states, we want separate folders for each year, otherwise they can all go in one rollup
+  
+  if(many_states==TRUE & ben_flag==FALSE &spin_flag==FALSE){
+    
+    fprof <- makeFirefoxProfile(list(browser.download.dir = paste0(directory,"/",year)
+                                     
+                                     ,  browser.download.folderList = 2L
+                                     
+                                     , browser.download.manager.showWhenStarting = FALSE
+                                     
+                                     , browser.helperApps.neverAsk.saveToDisk = "application/vnd.ms-excel"))
+    
+    
+    
+  }else{
+    
+    fprof <- makeFirefoxProfile(list(browser.download.dir = paste0(directory)
+                                     
+                                     ,  browser.download.folderList = 2L
+                                     
+                                     , browser.download.manager.showWhenStarting = FALSE
+                                     
+                                     , browser.helperApps.neverAsk.saveToDisk = "application/vnd.ms-excel"))
+    
+    
+    
+  }
+  
+  #start running selenium, automatically launches instance of the browser
+  
+  #if error message says port is in use, specify a different port
+  
+  rD <- rsDriver(browser='firefox',port=port_num,extraCapabilities=fprof)
+  
+  
+  
+  for(state in states){
+    
+    #need to redeclare the remDR environment after each run for some reason
+    
+    remDr <- rD$client
+    
+    #test to see if its the first year and state. If it is, open a new window. if it's not, refresh
+    
+    if(state==states[1] & year==years[1]){
+      
+      remDr$navigate(url)
+      
+    }else{
+      
+      remDr$navigate(url)
+      
+    }
+    
+    
+    
+    #locate the year dropdown, select the given year
+    
+    var<-c('//*/option[@value = ')
+    
+    State_Str<-paste(var,"'",state,"'","]",sep="")
+    
+    Year_Str<-paste(var,"'",year,"'","]",sep="")
+    
+    
+    
+    YearElem <- remDr$findElement(using = 'xpath', Year_Str)
+    
+    YearElem$clickElement()
+    
+    
+    
+    #locate the state dropdown, select the given state
+    
+    StateElem <- remDr$findElement(using = 'xpath', State_Str)
+    
+    StateElem$clickElement()
+    
+    
+    
+    #if ben_flag=TRUE, enter in the ben number specificied above
+    
+    if(ben_flag==TRUE){
+      
+      BENID<-'//*[@id="ctl00_ContentPlaceHolder_BEN"]'
+      
+      BENElem<-remDr$findElement(value=BENID)
+      
+      BENElem$clickElement()
+      
+      BENElem$sendKeysToElement(list(paste0(ben_no),key="tab"))
+      
+    }
+    
+    
+    
+    #if spin_flag=TRUE, enter in the spin number specified above
+    
+    if(spin_flag==TRUE){
+      
+      SPINID<-'//*[@id="ctl00_ContentPlaceHolder_SPIN"]'
+      
+      SPINElem<-remDr$findElement(value=SPINID)
+      
+      SPINElem$clickElement()
+      
+      SPINElem$sendKeysToElement(list(paste0(spin_no),key="tab"))
+      
+    }
+    
+    #locate and select the button for selecting data points
+    
+    selectID<-'//*[@id="ctl00_ContentPlaceHolder_cbSelectDatapoints"]'
+    
+    SelectElem<-remDr$findElement(value = selectID)
+    
+    SelectElem$clickElement()
+    
+    
+    
+    #locate and select the button for All data points
+    
+    
+    AllID<-'//*[@id="ctl00_ContentPlaceHolder_cbAll"]'
+    #State_Str<-paste0(state_path,'"',state,'"',']')
+
+    Sys.sleep(4)
+    
+    AllElem<-remDr$findElement(value = AllID)
+    
+    AllElem$clickElement()
+    
+    
+    
+    #locate and select the button to download as a tsv file
+    
+    TSVID<-'//*[@id="ctl00_ContentPlaceHolder_rblReportFormat_1"]'
+    
+    TSVElem<-remDr$findElement(value = TSVID)
+    
+    TSVElem$clickElement()
+    
+    
+    
+    #locate and select the download button
+    
+    DownloadID<-'//*[@id="ctl00_ContentPlaceHolder_bSearch"]'
+    
+    DownloadElem<-remDr$findElement(value = DownloadID)
+    
+    DownloadElem$clickElement()
+    
+    
+    
+    #wait for download to complete before moving to next step
+    
+    setwd(paste0(directory))
+    
+    #check if the download is completed by checking if there is a ".part" file in the download directory
+    
+    Sys.sleep(2)
+    
+    check_part<-length(list.files(pattern="*.part"))
+    
+    
+    
+    while(check_part != 0){
+      
+      check_part<-length(list.files(pattern="*.part"))
+      
+    }
+    
+    Sys.sleep(1)
+    
+  }
+  
+  #kill firefox after each year is done, doesn't work on windows unfortunately
+  
+  system("pkill -f firefox")
+  
+}
