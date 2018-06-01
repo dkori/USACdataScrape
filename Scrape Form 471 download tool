@@ -1,0 +1,173 @@
+#scrape USAC 2015 data
+rm(list=ls())
+#https://data.usac.org/publicreports/Forms/Form471Detail/Index
+require("readr")
+require("dplyr")
+require("RSelenium")
+require("readxl")
+require("RCurl")
+require("XML")
+require("rJava")
+require("sqldf")
+
+#states<-c("AK", "AL", "AR", "AS", "AZ", "CA", "CO", "CT", "DC", "DE", "FL", "GA", "GU", "HI", "IA", "ID", "IL", "IN", "KS", "KY", "LA", "MA", "MD", "ME", "MI", "MN", "MO", "MP", "MS", "MT", "NC", "ND", "NE", "NH", "NJ", "NM", "NV", "NY", "OH", "OK", "OR", "PA", "PR", "RI", "SC", "SD", "TN", "TX", "UT", "VA", "VI", "VT", "WA", "WI", "WV", "WY")
+states<-0:55
+
+#paste0(state)
+#state<-1
+
+date<-Sys.Date()
+Sys.Date()
+date<-"2018-05-02"
+directory<-'/users/shared/2015_471_Download/'
+system(paste0("mkdir ",directory))
+system(paste0("mkdir ",directory,date))
+directory<-paste0(directory,date)
+port_num<-4572L
+fprof <- makeFirefoxProfile(list(browser.download.dir = paste(directory)
+                                 ,  browser.download.folderList = 2L
+                                 , browser.download.manager.showWhenStarting = FALSE
+                                 , browser.helperApps.neverAsk.saveToDisk = "application/zip"))
+#rD<-rsDriver(browser="chrome")
+rD <- rsDriver(browser='firefox',port=port_num,extraCapabilities=fprof)
+remDr <- rD$client
+url<-"https://slweb.universalservice.org/form471publicdatatool/app/#/"
+for(state in states){
+  
+  
+  
+  #navigate to the download tool website
+  
+  remDr <- rD$client
+  
+  Sys.sleep(1)
+  
+  #refresh if it's not the first instance of the code
+  
+
+    
+  remDr$navigate(url)
+  
+  
+  
+  Sys.sleep(2)
+  
+  
+  
+  #print which state is being downloaded, for debugging purposes
+  
+  print(state)
+  
+  
+  
+  
+  
+  #sleep built in to allow page to load
+  
+  Sys.sleep(1)
+  
+  #state<-5
+  
+  #code below used to find the state dropdown box and control it
+  
+  state_path<-"//select[@name = 'StateCode']/option[@value="
+  
+  State_Str<-paste0(state_path,'"',state,'"',']')
+  #State_Str<-paste0(state_path,state,']')
+  #Version_Str<-paste(var,"'","2","'","]",sep="")
+  
+  Sys.sleep(1)
+  
+  #select state from dropdown
+  
+  StateElem <- remDr$findElement(using='xpath',State_Str)
+  
+  StateElem$clickElement()
+  
+  
+  
+  
+  
+  #click 'save' button
+  
+  searchID<-"btnSave"
+  
+  webElem<-remDr$findElement(using='name',value = searchID)
+  
+  webElem$clickElement()
+  
+  #change working directory to temp folder
+  
+  setwd(paste(directory))
+  
+  #check if the download is completed by checking if there is a ".part" file in the download directory
+  
+  Sys.sleep(2)
+  
+  check_part<-length(list.files(pattern="*.part"))
+  
+  
+  
+  while(check_part != 0){
+    
+    check_part<-length(list.files(pattern="*.part"))
+    
+  }
+  
+  Sys.sleep(1)
+  
+  
+  
+}
+
+setwd(directory)
+directory
+#?unzip
+file_list<-list.files(pattern='*.zip')
+file_list
+#temp_state<-read_csv(unzip(paste0(directory,'/',file_list[1]),'Discount Calculations for FY2015 AL Current.csv'))
+#iterate through all the downloaded zip files, load in the discount calculations, frn data, billing data, and item 21
+require(readr)
+
+for(x in 1:length(file_list)){
+  print(x)
+  #store file names of all files in zip archive
+  temp_list<-unzip(paste0(directory,'/',file_list[x]),list=TRUE)
+  #create strings containing the file names 
+  basic_str<-temp_list[grep('basic information',temp_list$Name,ignore.case=TRUE),1]
+  billing_str<-temp_list[grep('billing',temp_list$Name,ignore.case=TRUE),1]
+  discount_str<-temp_list[grep('discount',temp_list$Name,ignore.case=TRUE),1]
+  frn_str<-temp_list[grep('funding request',temp_list$Name,ignore.case=TRUE),1]
+  item21_str<-temp_list[grep('item 21 services',temp_list$Name,ignore.case=TRUE),1]
+  allocation_str<-temp_list[grep('allocation',temp_list$Name,ignore.case=TRUE),1]
+  temp_discount<-read_csv(unzip(paste0(directory,'/',file_list[x]),discount_str))
+  temp_frn<-read_csv(unzip(paste0(directory,'/',file_list[x]),frn_str))
+  temp_item21<-read_csv(unzip(paste0(directory,'/',file_list[x]),item21_str))
+  temp_basic<-read_csv(unzip(paste0(directory,'/',file_list[x]),basic_str))
+  temp_billing<-read_csv(unzip(paste0(directory,'/',file_list[x]),billing_str))
+  temp_allocation<-read_csv(unzip(paste0(directory,'/',file_list[x]),allocation_str))
+  if(x==1){
+    allocation<-temp_allocation
+    discount<-temp_discount
+    frn<-temp_frn
+    item21<-temp_item21
+    basic<-temp_basic
+    billing<-temp_billing
+  }else{
+    allocation<-rbind(allocation,temp_allocation)
+    discount<-rbind(discount,temp_discount)
+    frn<-rbind(frn,temp_frn)
+    item21<-rbind(item21,temp_item21)
+    basic<-rbind(basic,temp_basic)
+    billing<-rbind(billing,temp_billing)
+  }
+}
+print(colnames(discount))
+#length(unique(basic$`BE State`))
+#system(paste0("mkdir ",directory,'/complete_flat_files'))
+write_csv(allocation,paste0(directory,'/complete_flat_files','/allocation flat file.csv'))
+write_csv(discount,paste0(directory,'/complete_flat_files','/discount flat file.csv'))
+write_csv(frn,paste0(directory,'/complete_flat_files','/frn flat file.csv'))
+write_csv(item21,paste0(directory,'/complete_flat_files','/item 21 flat file.csv'))
+write_csv(basic,paste0(directory,'/complete_flat_files','/basic information flat file.csv'))
+write_csv(billing,paste0(directory,'/complete_flat_files','/billing flat file.csv'))
