@@ -20,18 +20,22 @@ date<-Sys.Date()
 Sys.Date()
 date<-"2018-05-02"
 directory<-'/users/shared/2015_471_Download/'
+#create a directory to store results, and a sub-directory for the state
 system(paste0("mkdir ",directory))
 system(paste0("mkdir ",directory,date))
 directory<-paste0(directory,date)
 port_num<-4572L
+
+#create firefox profile that defines the download directory and never automatically stores file to disk
 fprof <- makeFirefoxProfile(list(browser.download.dir = paste(directory)
                                  ,  browser.download.folderList = 2L
                                  , browser.download.manager.showWhenStarting = FALSE
                                  , browser.helperApps.neverAsk.saveToDisk = "application/zip"))
-#rD<-rsDriver(browser="chrome")
+#if firefox doesn't work, chrome should
 rD <- rsDriver(browser='firefox',port=port_num,extraCapabilities=fprof)
 remDr <- rD$client
 url<-"https://slweb.universalservice.org/form471publicdatatool/app/#/"
+#iterate through states, download each one
 for(state in states){
   
   
@@ -42,10 +46,9 @@ for(state in states){
   
   Sys.sleep(1)
   
-  #refresh if it's not the first instance of the code
   
 
-    
+  #navigate to USAC 471 download tool website  
   remDr$navigate(url)
   
   
@@ -121,14 +124,19 @@ for(state in states){
 }
 
 setwd(directory)
-directory
-#?unzip
+#store list of all the zip files just downloaded in "file_list"
 file_list<-list.files(pattern='*.zip')
 file_list
-#temp_state<-read_csv(unzip(paste0(directory,'/',file_list[1]),'Discount Calculations for FY2015 AL Current.csv'))
 #iterate through all the downloaded zip files, load in the discount calculations, frn data, billing data, and item 21
 require(readr)
-
+#create blank list for each file  in the zip files (basic, discount rate, frn, etc.)
+disc_list<-list()
+frn_list<-list()
+item21_list<-list()
+allocation_list<-list()
+basic_list<-list()
+billing_list<-list()
+#unzip each state, read in all the files, and append them to their respective blank lists
 for(x in 1:length(file_list)){
   print(x)
   #store file names of all files in zip archive
@@ -140,31 +148,25 @@ for(x in 1:length(file_list)){
   frn_str<-temp_list[grep('funding request',temp_list$Name,ignore.case=TRUE),1]
   item21_str<-temp_list[grep('item 21 services',temp_list$Name,ignore.case=TRUE),1]
   allocation_str<-temp_list[grep('allocation',temp_list$Name,ignore.case=TRUE),1]
-  temp_discount<-read_csv(unzip(paste0(directory,'/',file_list[x]),discount_str))
-  temp_frn<-read_csv(unzip(paste0(directory,'/',file_list[x]),frn_str))
-  temp_item21<-read_csv(unzip(paste0(directory,'/',file_list[x]),item21_str))
-  temp_basic<-read_csv(unzip(paste0(directory,'/',file_list[x]),basic_str))
-  temp_billing<-read_csv(unzip(paste0(directory,'/',file_list[x]),billing_str))
-  temp_allocation<-read_csv(unzip(paste0(directory,'/',file_list[x]),allocation_str))
-  if(x==1){
-    allocation<-temp_allocation
-    discount<-temp_discount
-    frn<-temp_frn
-    item21<-temp_item21
-    basic<-temp_basic
-    billing<-temp_billing
-  }else{
-    allocation<-rbind(allocation,temp_allocation)
-    discount<-rbind(discount,temp_discount)
-    frn<-rbind(frn,temp_frn)
-    item21<-rbind(item21,temp_item21)
-    basic<-rbind(basic,temp_basic)
-    billing<-rbind(billing,temp_billing)
-  }
+  disc_list[[x]]<-read_csv(unzip(paste0(directory,'/',file_list[x]),discount_str))
+  frn_list[[x]]<-read_csv(unzip(paste0(directory,'/',file_list[x]),frn_str))
+  item21_list[[x]]<-read_csv(unzip(paste0(directory,'/',file_list[x]),item21_str))
+  basic_list[[x]]<-read_csv(unzip(paste0(directory,'/',file_list[x]),basic_str))
+  billing_list[[x]]<-read_csv(unzip(paste0(directory,'/',file_list[x]),billing_str))
+  #for some states, `Cat 2 Cost Alloc` is read in as an integer, so force it to be numeric
+  allocation_list[[x]]<-read_csv(unzip(paste0(directory,'/',file_list[x]),allocation_str),
+                                 col_types=cols(.default=col_guess(),`Cat 2 Cost Alloc`=col_number()))
 }
-print(colnames(discount))
-#length(unique(basic$`BE State`))
-#system(paste0("mkdir ",directory,'/complete_flat_files'))
+#rbind all the files in each list
+allocation<-do.call(rbind,allocation_list)
+discount<-do.call(rbind,discount_list)
+frn<-do.call(rbind,frn_list)
+item21<-do.call(rbind,item12_list)
+basic<-do.call(rbind,basic_list)
+billing<-do.call(rbind,billing_list)
+
+#create a folder for "complete flat files" to write each flat file to
+system(paste0("mkdir ",directory,'/complete_flat_files'))
 write_csv(allocation,paste0(directory,'/complete_flat_files','/allocation flat file.csv'))
 write_csv(discount,paste0(directory,'/complete_flat_files','/discount flat file.csv'))
 write_csv(frn,paste0(directory,'/complete_flat_files','/frn flat file.csv'))
